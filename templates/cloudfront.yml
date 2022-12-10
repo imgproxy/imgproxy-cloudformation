@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template deploys a cloudfront distribution to chache the service responses
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: An environment name that will be prefixed to resource names
+
+  OriginHost:
+    Type: String
+    Description: An origin host
+
+  PathPrefix:
+    Type: String
+    Description: >
+      Origin path prefix, beginning with a slash (/).
+      Do not add a slash (/) at the end of the path
+    Default: ''
+
+  AuthorizationToken:
+    Type: String
+    Description: >
+      The bearer token that should be provided via the X-Imgproxy-Auth header to
+      get access to imgproxy. Allows to prevent access to imgproxy bypassing CDN.
+      The X-Imgproxy-Auth header is checked by the load balancer listener rule
+    Default: ''
+
+Conditions:
+  HaveAuthorizationToken: !Not [ !Equals [ !Ref AuthorizationToken, '' ] ]
+
+Resources:
+  CloudFrontDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Enabled: 'true'
+        Origins:
+          - DomainName: !Ref OriginHost
+            Id: !Sub '${EnvironmentName}-origin'
+            CustomOriginConfig:
+              HTTPPort: '80'
+              OriginProtocolPolicy: http-only
+            OriginPath: !Ref 'PathPrefix'
+            OriginCustomHeaders: !If
+              - HaveAuthorizationToken
+              - - HeaderName: X-Imgproxy-Auth
+                  HeaderValue: !Ref AuthorizationToken
+              - !Ref AWS::NoValue
+            OriginShield:
+              Enabled: 'true'
+              OriginShieldRegion: !Ref AWS::Region
+        DefaultCacheBehavior:
+          TargetOriginId: !Sub '${EnvironmentName}-origin'
+          SmoothStreaming: 'false'
+          ForwardedValues:
+            QueryString: 'false'
+            Cookies:
+              Forward: all
+          ViewerProtocolPolicy: redirect-to-https
+        PriceClass: PriceClass_All
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: 'true'
+
+Outputs:
+  CloudFrontURL:
+    Description: The URL of the CloudFront distribution
+    Value: !GetAtt CloudFrontDistribution.DomainName

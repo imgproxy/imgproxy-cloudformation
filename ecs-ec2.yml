@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: imgproxy running in ECS
+
+Parameters:
+  ClusterInstanceType:
+    Description: EC2 instance type to use in your ECS cluster
+    Type: String
+    Default: c7g.large
+    AllowedValues:
+      - 'c7g.medium'
+      - 'c7g.large'
+      - 'c7g.xlarge'
+      - 'c7g.2xlarge'
+      - 'c7g.4xlarge'
+      - 'c7g.8xlarge'
+      - 'c7g.12xlarge'
+      - 'c7g.16xlarge'
+      - 't4g.small'
+      - 't4g.medium'
+      - 't4g.large'
+      - 't4g.xlarge'
+      - 't4g.2xlarge'
+
+  ClusterDeisedSize:
+    Type: Number
+    Description: Number of EC2 instances to initially launch in your ECS cluster
+    Default: 1
+    MinValue: 1
+
+  ClusterMaxSize:
+    Type: Number
+    Description: The maximum number of EC2 instances to launch in your ECS cluster
+    Default: 5
+    MinValue: 1
+
+  DockerImage:
+    Type: String
+    Description: >
+      The imgproxy or imgproxy Pro Docker image name stored in a public registry
+      or your ECR registry.
+      Use Docker images built for the ARM64 (aarch64) platform
+    Default: 'darthsim/imgproxy:latest-arm64'
+
+  EnvironmentFile:
+    Type: String
+    Description: >
+      ARN of the Amazon S3 object containing the environment variable file.
+      The file must have a .env file extension.
+      Each line in an environment file should contain an environment variable in VARIABLE=VALUE format.
+      Lines beginning with # are treated as comments and are ignored.
+      See https://docs.imgproxy.net/configuration for supported environment variables
+    Default: ''
+
+  ContainerCpu:
+    Type: Number
+    Description: Amount of CPU to give to the container? 1024 is 1 CPU
+    Default: 1024
+    MinValue: 1024
+
+  ContainerMemory:
+    Type: Number
+    Description: Amount of memory in megabytes to give to the container
+    Default: 1024
+    MinValue: 512
+
+  TaskDesiredCount:
+    Type: Number
+    Description: Number of imgproxy instances to initially launch in your service
+    Default: 2
+    MinValue: 1
+
+  TaskMaxCount:
+    Type: Number
+    Description: Maximum number of imgproxy instances we can launch in your service
+    Default: 8
+
+  PathPrefix:
+    Type: String
+    Description: >
+      Path prefix, beginning with a slash (/).
+      Do not add a slash (/) at the end of the path
+    Default: ''
+
+  CreateCloudForontDistribution:
+    Type: String
+    Description: >
+      Should caching CloudFront distribution be created?
+      This CloudFront distribution will automatically add the path prefix when requesting the origin.
+      Also, it will automatically add X-Imgproxy-Auth header with the provided authorization token
+    Default: 'Yes'
+    AllowedValues:
+      - 'Yes'
+      - 'No'
+
+  AuthorizationToken:
+    Type: String
+    Description: >
+      The authorization token that should be provided via the X-Imgproxy-Auth header to
+      get access to imgproxy. Allows to prevent access to imgproxy bypassing CDN.
+      The X-Imgproxy-Auth header will be checked by the load balancer listener rule
+    Default: ''
+
+  S3Objects:
+    Type: CommaDelimitedList
+    Description: >
+      ARNs of S3 objects (comma delimited) that imgproxy should have access to.
+      You can grant access to multiple objects with a single ARN by using wildcards.
+      Example: arn:aws:s3:::my-images-bucket/*,arn:aws:s3:::my-assets-bucket/images/*
+    Default: ''
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Cluster Configuration"
+        Parameters:
+          - ClusterInstanceType
+          - ClusterDeisedSize
+          - ClusterMaxSize
+      - Label:
+          default: "Service Configuration"
+        Parameters:
+          - DockerImage
+          - EnvironmentFile
+          - ContainerCpu
+          - ContainerMemory
+          - TaskDesiredCount
+          - TaskMaxCount
+      - Label:
+          default: "Endpoint Configuration"
+        Parameters:
+          - PathPrefix
+          - CreateCloudForontDistribution
+      - Label:
+          default: "Security"
+        Parameters:
+          - AuthorizationToken
+          - S3Objects
+
+    ParameterLabels:
+      ClusterInstanceType:
+        default: "EC2 Instance Type"
+      ClusterDeisedSize:
+        default: "Desired Number Of instances"
+      ClusterMaxSize:
+        default: "Maximum Number Of instances"
+      DockerImage:
+        default: "Docker image"
+      EnvironmentFile:
+        default: "Environment file"
+      ContainerCpu:
+        default: "CPU Per Task"
+      ContainerMemory:
+        default: "Memory Per Task"
+      TaskDesiredCount:
+        default: "Desired Number Of Tasks"
+      TaskMaxCount:
+        default: "Maximum Number Of Tasks"
+      PathPrefix:
+        default: "Path Prefix (optional)"
+      CreateCloudForontDistribution:
+        default: "Create CloudForont Distribution?"
+      AuthorizationToken:
+        default: "Authorization Token (optional)"
+      S3Objects:
+        default: "S3 Objects (optional)"
+
+Conditions:
+  DeployCloudFront: !Equals [!Ref 'CreateCloudForontDistribution', 'Yes']
+
+Resources:
+  Network:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/network.yml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+
+  ALB:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/load-balancer.yml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        VPC: !GetAtt Network.Outputs.VPC
+        Subnets: !GetAtt Network.Outputs.PublicSubnets
+        SecurityGroup: !GetAtt Network.Outputs.LoadBalancerSecurityGroup
+
+  Cluster:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/ecs-cluster.yml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+
+  CapacityProvider:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/ecs-capacity-provider.yml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        Cluster: !GetAtt Cluster.Outputs.Cluster
+        VPC: !GetAtt Network.Outputs.VPC
+        SecurityGroup: !GetAtt Network.Outputs.ECSHostSecurityGroup
+        Subnets: !GetAtt Network.Outputs.PublicSubnets
+        ClusterInstanceType: !Ref ClusterInstanceType
+        ClusterDeisedSize: !Ref ClusterDeisedSize
+        ClusterMaxSize: !Ref ClusterMaxSize
+
+  Service:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/ecs-service.yml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        VPC: !GetAtt Network.Outputs.VPC
+        SecurityGroup: !GetAtt Network.Outputs.ECSHostSecurityGroup
+        Subnets: !GetAtt Network.Outputs.PublicSubnets
+        Cluster: !GetAtt Cluster.Outputs.Cluster
+        CapacityProvider: !GetAtt CapacityProvider.Outputs.CapacityProvider
+        Listener: !GetAtt ALB.Outputs.Listener
+        LaunchType: EC2
+        DockerImage: !Ref DockerImage
+        EnvironmentFile: !Ref EnvironmentFile
+        ContainerCpu: !Ref ContainerCpu
+        ContainerMemory: !Ref ContainerMemory
+        TaskDesiredCount: !Ref TaskDesiredCount
+        TaskMaxCount: !Ref TaskMaxCount
+        PathPrefix: !Ref PathPrefix
+        AuthorizationToken: !Ref AuthorizationToken
+        S3Objects: !Join [ ",", !Ref S3Objects ]
+
+  CloudFront:
+    Condition: DeployCloudFront
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/cloudfront.yml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        OriginHost: !GetAtt ALB.Outputs.LoadBalancerUrl
+        AuthorizationToken: !Ref AuthorizationToken
+        PathPrefix: !Ref PathPrefix
+
+Outputs:
+  DirectURL:
+    Description: The direct URL endpoint for imgproxy
+    Value: !GetAtt ALB.Outputs.LoadBalancerUrl
+
+  CloudFrontURL:
+    Condition: DeployCloudFront
+    Description: The CloudFront endpoint for imgproxy
+    Value: !GetAtt CloudFront.Outputs.CloudFrontURL

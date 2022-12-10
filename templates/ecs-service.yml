@@ -1,0 +1,420 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This template deploys a long running ECS service to the provided cluster and creates
+  a listener rule for Application Load Balancer
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: An environment name that will be prefixed to resource names
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: The VPC that the ECS cluster is deployed to
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The subnets this ECS cluster should be deployed to
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: The Security Group to use for the ECS cluster hosts
+
+  Cluster:
+    Type: String
+    Description: The ECS Cluster ID that this service should run on
+
+  CapacityProvider:
+    Type: String
+    Description: >
+      The ECS capacity provider ID that this service should use.
+      Used only if LaunchType is EC2
+    Default: ''
+
+  Listener:
+    Type: String
+    Description: The Application Load Balancer listener to register with
+
+  LaunchType:
+    Type: String
+    Description: The launch type that be used for this service
+    AllowedValues:
+      - FARGATE
+      - EC2
+
+  DockerImage:
+    Type: String
+    Description: >
+      The imgproxy or imgproxy Pro Docker image name.
+      Use Docker images built for the ARM64 (aarch64) platform
+    Default: 'darthsim/imgproxy:latest-arm64'
+
+  EnvironmentFile:
+    Type: String
+    Description: >
+      ARN of the Amazon S3 object containing the environment variable file.
+      The file must have a .env file extension.
+      Each line in an environment file should contain an environment variable in VARIABLE=VALUE format.
+      Lines beginning with # are treated as comments and are ignored.
+    Default: ''
+
+  ContainerCpu:
+    Type: Number
+    Description: Amount of CPU to give to the container? 1024 is 1 CPU
+    Default: 1024
+    MinValue: 1024
+
+  ContainerMemory:
+    Type: Number
+    Description: Amount of memory in megabytes to give to the container
+    Default: 2048
+    MinValue: 512
+
+  TaskDesiredCount:
+    Type: Number
+    Description: Number of imgproxy instances to initially launch in your service
+    Default: 2
+    MinValue: 1
+
+  TaskMaxCount:
+    Type: Number
+    Description: Maximum number of imgproxy instances we can launch in your service
+    Default: 8
+
+  PathPrefix:
+    Type: String
+    Description: >
+      Path prefix, beginning with a slash (/).
+      Do not add a slash (/) at the end of the path
+    Default: ''
+
+  AuthorizationToken:
+    Type: String
+    Description: >
+      The bearer token that should be provided via the X-Imgproxy-Auth header to
+      get access to imgproxy. Allows to prevent access to imgproxy bypassing CDN.
+      The X-Imgproxy-Auth header will be checked by the load balancer listener rule
+    Default: ''
+
+  S3Objects:
+    Type: CommaDelimitedList
+    Description: >
+      ARNs of S3 objects (comma delimited) that imgproxy should have access to.
+      You can grant access to multiple objects with a single ARN by using wildcards.
+      Example: arn:aws:s3:::my-images-bucket/*,arn:aws:s3:::my-assets-bucket/images/*
+    Default: ''
+
+Conditions:
+  UseFargate: !Equals [ !Ref LaunchType, 'FARGATE' ]
+  UseEC2: !Equals [ !Ref LaunchType, 'EC2' ]
+  HaveEnvironmentFile: !Not [ !Equals [ !Ref EnvironmentFile, '' ] ]
+  HavePathPrefix: !Not [ !Equals [ !Ref PathPrefix, '' ] ]
+  HaveAuthorizationToken: !Not [ !Equals [ !Ref AuthorizationToken, '' ] ]
+  HaveS3Objects: !Not [ !Equals [ !Join [ '', !Ref S3Objects ], '' ] ]
+
+Resources:
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerRule
+    Properties:
+      ServiceName: !Ref EnvironmentName
+      Cluster: !Ref Cluster
+      LaunchType: !If [ UseFargate, 'FARGATE', !Ref AWS::NoValue ]
+      DesiredCount: !Ref TaskDesiredCount
+      TaskDefinition: !Ref TaskDefinition
+      CapacityProviderStrategy: !If
+        - UseEC2
+        - - Base: 1
+            Weight: 10
+            CapacityProvider: !Ref CapacityProvider
+        - !Ref AWS::NoValue
+      NetworkConfiguration: !If
+        - UseFargate
+        - AwsvpcConfiguration:
+            AssignPublicIp: ENABLED
+            SecurityGroups:
+              - !Ref SecurityGroup
+            Subnets: !Ref Subnets
+        - !Ref AWS::NoValue
+      LoadBalancers:
+        - ContainerName: "imgproxy"
+          ContainerPort: 8080
+          TargetGroupArn: !Ref TargetGroup
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref EnvironmentName
+      Cpu: !Ref 'ContainerCpu'
+      Memory: !If [ UseFargate, !Ref 'ContainerMemory', !Ref AWS::NoValue ]
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      NetworkMode: !If [ UseEC2, bridge, awsvpc ]
+      RequiresCompatibilities:
+        - !Ref LaunchType
+      TaskRoleArn: !Ref TaskRole
+      ExecutionRoleArn: !Ref TaskExecutionRole
+      ContainerDefinitions:
+        - Name: imgproxy
+          Essential: true
+          Image: !Ref DockerImage
+          Cpu: !Ref 'ContainerCpu'
+          Memory: !If [ UseFargate, !Ref 'ContainerMemory', !Ref AWS::NoValue ]
+          MemoryReservation: !If [ UseEC2, !Ref 'ContainerMemory', !Ref AWS::NoValue ]
+          Environment:
+            - Name: IMGPROXY_BIND
+              Value: ':8080'
+            - !If
+              - HavePathPrefix
+              - Name: IMGPROXY_PATH_PREFIX
+                Value: !Ref PathPrefix
+              - !Ref AWS::NoValue
+            - !If
+              - HaveS3Objects
+              - Name: IMGPROXY_USE_S3
+                Value: '1'
+              - !Ref AWS::NoValue
+            - Name: IMGPROXY_CLOUD_WATCH_SERVICE_NAME
+              Value: !Ref EnvironmentName
+            - Name: IMGPROXY_CLOUD_WATCH_NAMESPACE
+              Value: 'imgproxy'
+            - Name: IMGPROXY_CLOUD_WATCH_REGION
+              Value: !Ref AWS::Region
+          EnvironmentFiles: !If
+            - HaveEnvironmentFile
+            - - Type: s3
+                Value: !Ref EnvironmentFile
+            - !Ref AWS::NoValue
+          PortMappings:
+            - ContainerPort: 8080
+          HealthCheck:
+            Command:
+              - 'CMD-SHELL'
+              - 'imgproxy health'
+            Interval: 10
+            Retries: 3
+            Timeout: 2
+            StartPeriod: 5
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref EnvironmentName
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ecs-task-${EnvironmentName}
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ['sts:AssumeRole']
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Condition:
+              ArnLike:
+                'aws:SourceArn': !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*'
+              StringEquals:
+                'aws:SourceAccount': !Ref AWS::AccountId
+      Policies:
+        - PolicyName: !Sub ecs-task-cloudwatch-${EnvironmentName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'cloudwatch:PutMetricData'
+                  - 'cloudwatch:PutMetricStream'
+                Resource: '*'
+        - !If
+          - HaveS3Objects
+          - PolicyName: !Sub ecs-task-s3-${EnvironmentName}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - 's3:GetObject'
+                    - 's3:GetObjectVersion'
+                  Resource: !Ref S3Objects
+          - !Ref AWS::NoValue
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ecs-task-execution-${EnvironmentName}
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ['sts:AssumeRole']
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - !If
+          - HaveEnvironmentFile
+          - PolicyName: !Sub ecs-task-execution-s3-${EnvironmentName}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action: ['s3:GetObject']
+                  Resource: !Ref EnvironmentFile
+                - Effect: Allow
+                  Action: ['s3:GetBucketLocation']
+                  Resource: !Select [ 0, !Split [ "/", !Ref EnvironmentFile ] ]
+          - !Ref AWS::NoValue
+
+  CloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref EnvironmentName
+      RetentionInDays: 365
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Ref EnvironmentName
+      VpcId: !Ref VPC
+      Port: 80
+      Protocol: HTTP
+      TargetType: !If [ UseEC2, instance, ip ]
+      HealthCheckIntervalSeconds: 5
+      HealthCheckPath: !Sub '${PathPrefix}/health'
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 2
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref Listener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - !Sub '${PathPrefix}/*'
+        - !If
+          - HaveAuthorizationToken
+          - Field: http-header
+            HttpHeaderConfig:
+              HttpHeaderName: X-Imgproxy-Auth
+              Values:
+                - !Ref AuthorizationToken
+          - !Ref AWS::NoValue
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+
+  ServiceScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !Ref TaskMaxCount
+      MinCapacity: !Ref TaskDesiredCount
+      ResourceId: !Join
+        - /
+        - - service
+          - !Ref Cluster
+          - !GetAtt Service.Name
+      RoleARN: !Sub 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService'
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  ServiceScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ServiceScaleOutPolicy
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 30
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0
+            MetricIntervalUpperBound: 50
+            ScalingAdjustment: 1
+          - MetricIntervalLowerBound: 50
+            MetricIntervalUpperBound: 100
+            ScalingAdjustment: 2
+          - MetricIntervalLowerBound: 100
+            ScalingAdjustment: 3
+
+  ServiceScaleInPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ServiceScaleInPolicy
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 30
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalUpperBound: 0
+            ScalingAdjustment: -1
+
+  # Create alarms to trigger these policies
+  HighConcurrencyUsageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join
+        - '-'
+        - - high-concurrency
+          - !Ref EnvironmentName
+          - !GetAtt Service.Name
+      AlarmDescription: !Join
+        - ' '
+        - - "High concurrency utilization for service"
+          - !GetAtt Service.Name
+          - "in environment"
+          - !Ref EnvironmentName
+      MetricName: ConcurrencyUtilization
+      Namespace: imgproxy
+      Dimensions:
+        - Name: ServiceName
+          Value: !GetAtt Service.Name
+      Statistic: Average
+      Period: 10
+      EvaluationPeriods: 1
+      Threshold: 75
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref ServiceScaleOutPolicy
+
+  LowConcurrencyUsageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join
+        - '-'
+        - - low-concurrency
+          - !Ref EnvironmentName
+          - !GetAtt Service.Name
+      AlarmDescription: !Join
+        - ' '
+        - - "Low concurrency utilization for service"
+          - !GetAtt Service.Name
+          - "in environment"
+          - !Ref EnvironmentName
+      MetricName: ConcurrencyUtilization
+      Namespace: imgproxy
+      Dimensions:
+        - Name: ServiceName
+          Value: !GetAtt Service.Name
+      Statistic: Average
+      Period: 10
+      EvaluationPeriods: 3
+      Threshold: 50
+      ComparisonOperator: LessThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref ServiceScaleInPolicy
