@@ -172,14 +172,14 @@ Resources:
   Network:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/network.yml
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cf/templates/network.yml
       Parameters:
         EnvironmentName: !Ref AWS::StackName
 
   ALB:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/load-balancer.yml
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cf/templates/load-balancer.yml
       Parameters:
         EnvironmentName: !Ref AWS::StackName
         VPC: !GetAtt Network.Outputs.VPC
@@ -189,14 +189,14 @@ Resources:
   Cluster:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/ecs-cluster.yml
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cf/templates/ecs-cluster.yml
       Parameters:
         EnvironmentName: !Ref AWS::StackName
 
   CapacityProvider:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/ecs-capacity-provider.yml
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cf/templates/ecs-capacity-provider.yml
       Parameters:
         EnvironmentName: !Ref AWS::StackName
         Cluster: !GetAtt Cluster.Outputs.Cluster
@@ -210,7 +210,7 @@ Resources:
   Service:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/ecs-service.yml
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cf/templates/ecs-service.yml
       Parameters:
         EnvironmentName: !Ref AWS::StackName
         VPC: !GetAtt Network.Outputs.VPC
@@ -234,7 +234,7 @@ Resources:
     Condition: DeployCloudFront
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/imgproxy-cloudformation/templates/cloudfront.yml
+      TemplateURL: https://s3.amazonaws.com/imgproxy-cf/templates/cloudfront.yml
       Parameters:
         EnvironmentName: !Ref AWS::StackName
         OriginHost: !GetAtt ALB.Outputs.LoadBalancerUrl
