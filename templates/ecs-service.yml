@@ -289,6 +289,9 @@ Resources:
       Port: 80
       Protocol: HTTP
       TargetType: !If [ UseEC2, instance, ip ]
+      TargetGroupAttributes:
+        - Key: load_balancing.algorithm.type
+          Value: least_outstanding_requests
       HealthCheckIntervalSeconds: 5
       HealthCheckPath: !Sub '${PathPrefix}/health'
       HealthCheckProtocol: HTTP
