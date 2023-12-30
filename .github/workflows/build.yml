@@ -1,0 +1,26 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-templates.yml
+  lint-templates:
+    needs: build
+    uses: ./.github/workflows/lint-templates.yml
+    with:
+      artifact-key: ${{ needs.build.outputs.artifact-key }}
+  upload-templates:
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      id-token: write
+    needs: [build, lint-templates]
+    uses: ./.github/workflows/upload-templates.yml
+    with:
+      artifact-key: ${{ needs.build.outputs.artifact-key }}
+      tag: latest
+    secrets: inherit

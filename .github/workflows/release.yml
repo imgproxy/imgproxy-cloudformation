@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-templates.yml
+  lint-templates:
+    needs: build
+    uses: ./.github/workflows/lint-templates.yml
+    with:
+      artifact-key: ${{ needs.build.outputs.artifact-key }}
+  upload-templates:
+    permissions:
+      contents: read
+      id-token: write
+    needs: [build, lint-templates]
+    uses: ./.github/workflows/upload-templates.yml
+    with:
+      artifact-key: ${{ needs.build.outputs.artifact-key }}
+      tag: ${{ github.ref_name }}
+    secrets: inherit
+  release:
+    needs: [build, lint-templates, upload-templates]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Prepare notes
+        id: prepare-notes
+        env:
+          TEMPLATES: ${{ needs.build.outputs.templates }}
+        run: |
+          # Extract changelog entries between this and previous version headers
+          escaped_version=$(echo ${GITHUB_REF_NAME#v} | sed -e 's/[]\/$*.^[]/\\&/g')
+          awk "BEGIN{inrelease=0} /## \[${escaped_version}\]/{inrelease=1;next} /## \[[0-9]+\.[0-9]+\.[0-9]+.*\]/{inrelease=0;exit} {if (inrelease) print}" CHANGELOG.md \
+            > RELEASE_NOTES.txt
+
+          echo "" >> RELEASE_NOTES.txt
+          echo "| Template | |" >> RELEASE_NOTES.txt
+          echo "| --- | --- |" >> RELEASE_NOTES.txt
+          echo "$TEMPLATES" | awk 'BEGIN{FS=" => "}{print "| " $2 " | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/${{ github.ref_name }}/" $1 ") |"}' >> RELEASE_NOTES.txt
+
+          # Write prerelease="true" env if tag name has any suffix after vMAJOR.MINOR.PATCH
+          if [[ ${GITHUB_REF_NAME} =~ ^v[0-9]+\.[0-9]+\.[0-9]+.+ ]]; then
+            echo 'prerelease="true"' >> $GITHUB_OUTPUT
+          else
+            echo 'prerelease="false"' >> $GITHUB_OUTPUT
+          fi
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: RELEASE_NOTES.txt
+          prerelease: ${{ fromJSON(steps.prepare-notes.outputs.prerelease) }}

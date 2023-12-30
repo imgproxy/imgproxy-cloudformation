@@ -1,0 +1,59 @@
+name: Build templates
+
+on:
+  workflow_call:
+    outputs:
+      artifact-key:
+        description: "The key of the uploaded artifact"
+        value: "dist-${{ github.run_id }}-${{ github.run_attempt }}"
+      templates:
+        description: "Template filenames and descriptions"
+        value: ${{ jobs.build.outputs.templates }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      templates: ${{ steps.build.outputs.templates }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.9
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Build templates
+        id: build
+        run: |
+          mkdir dist
+
+          python template.py -o dist/ecs-fargate-full.yml --launch-type=fargate
+          echo "ecs-fargate-full.yml => Fargate" >> templates.txt
+
+          python template.py -o dist/ecs-fargate-no-network.yml --launch-type=fargate -N
+          echo "ecs-fargate-no-network.yml => Fargate (no network)" >> templates.txt
+
+          python template.py -o dist/ecs-fargate-no-cluster.yml --launch-type=fargate -C -N
+          echo "ecs-fargate-no-cluster.yml => Fargate (no cluster, no network)" >> templates.txt
+
+          python template.py -o dist/ecs-ec2-full.yml --launch-type=ec2
+          echo "ecs-ec2-full.yml => EC2" >> templates.txt
+
+          python template.py -o dist/ecs-ec2-no-network.yml --launch-type=ec2 -N
+          echo "ecs-ec2-no-network.yml => EC2 (no network)" >> templates.txt
+
+          python template.py -o dist/ecs-ec2-no-cluster.yml --launch-type=ec2 -C -N
+          echo "ecs-ec2-no-cluster.yml => EC2 (no cluster, no network)" >> templates.txt
+
+          echo 'templates<<EOF' >> $GITHUB_OUTPUT
+          cat templates.txt >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+      - name: Upload templates
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist
+          retention-days: 1

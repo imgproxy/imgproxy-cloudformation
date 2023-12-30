@@ -18,6 +18,11 @@
   <a href="https://discord.gg/5GgpXgtC9u">Discord</a>
 </h4>
 
+<p align="center">
+<a href="https://github.com/imgproxy/imgproxy-cloudformation/actions"><img alt="GH Build" src="https://img.shields.io/github/actions/workflow/status/imgproxy/imgproxy-cloudformation/build.yml?branch=master&label=Build&style=for-the-badge" /></a>
+<a href="https://github.com/imgproxy/imgproxy-cloudformation/actions"><img alt="GH Lint" src="https://img.shields.io/github/actions/workflow/status/imgproxy/imgproxy-cloudformation/lint.yml?branch=master&label=Lint&style=for-the-badge" /></a>
+</p>
+
 ---
 
 [imgproxy](https://imgproxy.net) is a fast and secure standalone server for resizing and converting remote images. The main principles of imgproxy are simplicity, speed, and security.
@@ -27,6 +32,9 @@ This repository contains a [troposphere](https://github.com/cloudtools/troposphe
 ## Using pre-built templates
 
 We prepared a few pre-built templates that you can use right away. Just click on a link, set the required options, and you're ready to process your images.
+
+> [!NOTE]
+> The links in the README point to the templates built from the `master` branch. If you want to use a specific version, you can find the links in the [releases](https://github.com/imgproxy/imgproxy-cloudformation/releases) section.
 
 ### Full intallation
 
