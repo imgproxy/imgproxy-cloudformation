@@ -35,7 +35,8 @@ cli_parser.add_argument("-f", "--format",
                         help="Output format. Default: yaml")
 cli_parser.add_argument("-o", "--output",
                         type=str,
-                        help="Output file name. When not set, the template will be printed to stdout")
+                        help=("Output file name."
+                              " When not set, the template will be printed to stdout"))
 cli_parser.add_argument("-t", "--launch-type",
                         choices=["fargate", "ec2"],
                         default="fargate",
@@ -63,9 +64,11 @@ template.set_description("imgproxy running in ECS")
 yes_no = ["Yes", "No"]
 def IfYes(param): return Equals(Ref(param), "Yes")
 
+
 class Contains(AWSHelperFn):
     def __init__(self, value_one: object, value_two: object) -> None:
         self.data = {"Fn::Contains": [value_one, value_two]}
+
 
 arm64_instance_types = [
   "c7g.medium",
@@ -126,8 +129,10 @@ amd64_instance_types = [
 network_params_group = "Network"
 cluster_params_group = "Cluster"
 service_params_group = "Service"
-environment_secret_params_group = "Load environment from an AWS Secrets Manager secret"
-environment_systems_manager_params_group = "Load environment from AWS Systems Manager Parameter Store"
+environment_secret_params_group = \
+  "Load environment from an AWS Secrets Manager secret"
+environment_systems_manager_params_group = \
+  "Load environment from AWS Systems Manager Parameter Store"
 s3_params_group = "S3 integration"
 endpoint_params_group = "Endpoint"
 
@@ -154,7 +159,8 @@ if args.no_network:
     ecs_host_security_group = template.add_parameter(Parameter(
       "ECSHostSecurityGroupId",
       Type="AWS::EC2::SecurityGroup::Id",
-      Description="ID of security group to use for ECS hosts. Should allow access from the load balancer",
+      Description=("ID of security group to use for ECS hosts."
+                   " Should allow access from the load balancer"),
     ))
     template.add_parameter_to_group(ecs_host_security_group, network_params_group)
     template.set_parameter_label(ecs_host_security_group, "ECS host security group ID")
@@ -163,7 +169,8 @@ if args.no_network:
     "LoadBalancerListenerArn",
     Type="String",
     Description="ARN of the load balancer listener to use for imgproxy",
-    AllowedPattern="arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]+:listener/app/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9]+",
+    AllowedPattern=("arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]+:"
+                    "listener/app/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9]+"),
     ConstraintDescription="Must be a valid load balancer listener ARN",
   ))
   template.add_parameter_to_group(load_balancer_listener, network_params_group)
@@ -215,13 +222,11 @@ if args.launch_type == "ec2" and not args.no_cluster:
   cluster_target_capacity_utilization = template.add_parameter(Parameter(
     "ClusterTargetCapacityUtilization",
     Type="Number",
-    Description="""
-The target capacity utilization as a percentage for the EC2 Auto Scaling group.
-For example, if you want the Auto Scaling group to maintain 10% spare capacity, then that means the
-utilization is 90%, so use a value of 90.
-The value of 100 percent results in the Amazon EC2 instances in your Auto Scaling group being
-completely used
-    """.strip().replace("\n", " "),
+    Description=("The target capacity utilization as a percentage for the EC2 Auto Scaling group."
+                 " For example, if you want the Auto Scaling group to maintain 10% spare capacity,"
+                 " then that means the utilization is 90%, so use a value of 90. The value of 100"
+                 " percent results in the Amazon EC2 instances in your Auto Scaling group being"
+                 " completely used"),
     Default=100,
     MinValue=1,
     MaxValue=100,
@@ -232,10 +237,8 @@ completely used
   cluster_on_demand_percentage = template.add_parameter(Parameter(
     "ClusterOnDemandPercentage",
     Type="Number",
-    Description="""
-Controls the percentages of On-Demand Instances and Spot Instances in the EC2 Auto Scaling group.
-If set to 100, only On-Demand Instances are used
-    """.strip().replace("\n", " "),
+    Description=("Controls the percentages of On-Demand Instances and Spot Instances in the EC2"
+                 " Auto Scaling group. If set to 100, only On-Demand Instances are used"),
     Default=100,
     MinValue=1,
     MaxValue=100,
@@ -246,12 +249,10 @@ If set to 100, only On-Demand Instances are used
   cluster_add_warm_pool = template.add_parameter(Parameter(
     "ClusterAddWramPool",
     Type="String",
-    Description="""
-Create a pool of pre-initialized EC2 instances that sits alongside the EC2 Auto Scaling group.
-Whenever your application needs to scale out, the Auto Scaling group can draw on the warm pool
-to meet its new desired capacity.
-Can not be used if ClusterOnDemandPercentage is below 100
-    """.strip().replace("\n", " "),
+    Description=("Create a pool of pre-initialized EC2 instances that sits alongside the EC2 Auto"
+                 " Scaling group. Whenever your application needs to scale out, the Auto Scaling"
+                 " group can draw on the warm pool to meet its new desired capacity. Can not be"
+                 " used if ClusterOnDemandPercentage is below 100"),
     Default="Yes",
     AllowedValues=yes_no,
   ))
@@ -287,9 +288,8 @@ template.set_parameter_label(cpu_arch, "CPU architecture")
 docker_image = template.add_parameter(Parameter(
   "DockerImage",
   Type="String",
-  Description="""
-The imgproxy or imgproxy Pro Docker image name stored in a public registry or your ECR registry
-  """.strip().replace("\n", " "),
+  Description=("The imgproxy or imgproxy Pro Docker image name stored in a public registry or your"
+               " ECR registry"),
   Default="darthsim/imgproxy:v3",
 ))
 template.add_parameter_to_group(docker_image, service_params_group)
@@ -348,56 +348,56 @@ template.set_parameter_label(task_max_count, "Maximum number of tasks")
 environment_secret_arn = template.add_parameter(Parameter(
   "EnvironmentSecretARN",
   Type="String",
-  Description="""
-ARN of an AWS Secrets Manager secret containing environment variables.
-See https://docs.imgproxy.net/latest/configuration/loading_environment_variables#environment-file-syntax
-for the secret syntax.
-See https://docs.imgproxy.net/configuration for supported environment variables
-  """.strip().replace("\n", " "),
+  Description=("ARN of an AWS Secrets Manager secret containing environment variables. See"
+               " https://docs.imgproxy.net/latest/configuration/loading_environment_variables#environment-file-syntax"  # noqa: E501
+               " for the secret syntax. See https://docs.imgproxy.net/configuration for supported"
+               " environment variables"),
   Default="",
 ))
-template.add_parameter_to_group(environment_secret_arn, environment_secret_params_group)
-template.set_parameter_label(environment_secret_arn, "Secrets Manager secret ARN (optional)")
+template.add_parameter_to_group(environment_secret_arn,
+                                environment_secret_params_group)
+template.set_parameter_label(environment_secret_arn,
+                             "Secrets Manager secret ARN (optional)")
 
 environment_secret_version_id = template.add_parameter(Parameter(
   "EnvironmentSecretVersionID",
   Type="String",
-  Description="""
-Version ID of the AWS Secrets Manager secret containing environment variables.
-If not set, the latest version is used
-  """.strip().replace("\n", " "),
+  Description=("Version ID of the AWS Secrets Manager secret containing environment variables."
+               " If not set, the latest version is used"),
   Default="",
 ))
-template.add_parameter_to_group(environment_secret_version_id, environment_secret_params_group)
-template.set_parameter_label(environment_secret_version_id, "Secrets Manager secret version ID (optional)")
+template.add_parameter_to_group(environment_secret_version_id,
+                                environment_secret_params_group)
+template.set_parameter_label(environment_secret_version_id,
+                             "Secrets Manager secret version ID (optional)")
 
 # Systems manager --------------------------------------------------------------
 
 environment_systems_manager_parameters_path = template.add_parameter(Parameter(
   "EnvironmentSystemsManagerParametersPath",
   Type="String",
-  Description="""
-A path of AWS Systems Manager Parameter Store parameters containing the environment variables.
-The path should start with a slash (/) but should not have a slash (/) at the end.
-See https://docs.imgproxy.net/latest/configuration/loading_environment_variables#aws-systems-manager-path
-to learn how imgproxy maps AWS Systems Manager Parameter Store parameters to environment variables.
-See https://docs.imgproxy.net/configuration for supported environment variables
-  """.strip().replace("\n", " "),
+  Description=("A path of AWS Systems Manager Parameter Store parameters containing the"
+               " environment variables. The path should start with a slash (/) but should not have"
+               " a slash (/) at the end. See"
+               " https://docs.imgproxy.net/latest/configuration/loading_environment_variables#aws-systems-manager-path"  # noqa: E501
+               " to learn how imgproxy maps AWS Systems Manager Parameter Store parameters to"
+               " environment variables. See https://docs.imgproxy.net/configuration for supported"
+               " environment variables"),
   Default="",
 ))
-template.add_parameter_to_group(environment_systems_manager_parameters_path, environment_systems_manager_params_group)
-template.set_parameter_label(environment_systems_manager_parameters_path, "Systems Manager Parameter Store parameters path (optional)")
+template.add_parameter_to_group(environment_systems_manager_parameters_path,
+                                environment_systems_manager_params_group)
+template.set_parameter_label(environment_systems_manager_parameters_path,
+                             "Systems Manager Parameter Store parameters path (optional)")
 
 # S3 ---------------------------------------------------------------------------
 
 s3_objects = template.add_parameter(Parameter(
   "S3Objects",
   Type="CommaDelimitedList",
-  Description="""
-ARNs of S3 objects (comma delimited) that imgproxy should have access to.
-You can grant access to multiple objects with a single ARN by using wildcards.
-Example: arn:aws:s3:::my-images-bucket/*,arn:aws:s3:::my-assets-bucket/images/*
-  """.strip().replace("\n", " "),
+  Description=("ARNs of S3 objects (comma delimited) that imgproxy should have access to. You can"
+               " grant access to multiple objects with a single ARN by using wildcards. Example:"
+               " arn:aws:s3:::my-images-bucket/*,arn:aws:s3:::my-assets-bucket/images/*"),
   Default="",
 ))
 template.add_parameter_to_group(s3_objects, s3_params_group)
@@ -406,10 +406,8 @@ template.set_parameter_label(s3_objects, "S3 objects (optional)")
 s3_assume_role_arn = template.add_parameter(Parameter(
   "S3AssumeRoleARN",
   Type="String",
-  Description="""
-ARN of IAM Role that S3 client should assume. This allows you to provide imgproxy access to
-third-party S3 buckets that the assummed IAM Role has access to
-  """.strip().replace("\n", " "),
+  Description=("ARN of IAM Role that S3 client should assume. This allows you to provide imgproxy"
+               " access to third-party S3 buckets that the assummed IAM Role has access to"),
   Default="",
 ))
 template.add_parameter_to_group(s3_assume_role_arn, s3_params_group)
@@ -418,10 +416,8 @@ template.set_parameter_label(s3_assume_role_arn, "IAM Role ARN to assume (option
 s3_multi_region = template.add_parameter(Parameter(
   "S3MultiRegion",
   Type="String",
-  Description="""
-Should imgproxy be able to access S3 buckets in other regions?
-By default, imgproxy can access only S3 buckets locates in the same region as imgproxy
-  """.strip().replace("\n", " "),
+  Description=("Should imgproxy be able to access S3 buckets in other regions? By default, imgproxy"
+               " can access only S3 buckets locates in the same region as imgproxy"),
   Default="No",
   AllowedValues=yes_no,
 ))
@@ -431,11 +427,8 @@ template.set_parameter_label(s3_multi_region, "Enable multi-region mode")
 s3_client_side_decryption = template.add_parameter(Parameter(
   "S3ClientSideDecryption",
   Type="String",
-  Description="""
-Should imgproxy use S3 decryption client?
-The decription client will be used for all objects in all S3 buckets, so unecrypted objects won't
-be accessable
-  """.strip().replace("\n", " "),
+  Description=("Should imgproxy use S3 decryption client? The decription client will be used for"
+               "all objects in all S3 buckets, so unecrypted objects won't be accessable"),
   Default="No",
   AllowedValues=yes_no,
 ))
@@ -447,7 +440,8 @@ template.set_parameter_label(s3_client_side_decryption, "Enable client-side decr
 path_prefix = template.add_parameter(Parameter(
   "PathPrefix",
   Type="String",
-  Description="Path prefix, beginning with a slash (/). Do not add a slash (/) at the end of the path",
+  Description=("Path prefix, beginning with a slash (/)."
+               "Do not add a slash (/) at the end of the path"),
   Default="",
 ))
 template.add_parameter_to_group(path_prefix, endpoint_params_group)
@@ -457,11 +451,10 @@ if not args.no_network:
   create_cloudfront_distribution = template.add_parameter(Parameter(
     "CreateCloudFrontDistribution",
     Type="String",
-    Description="""
-  Should caching CloudFront distribution be created?
-  This CloudFront distribution will automatically add the path prefix when requesting the origin.
-  Also, it will automatically add X-Imgproxy-Auth header with the provided authorization token
-    """.strip().replace("\n", " "),
+    Description=("Should caching CloudFront distribution be created? This CloudFront distribution"
+                 " will automatically add the path prefix when requesting the origin. Also, it"
+                 " will automatically add X-Imgproxy-Auth header with the provided authorization"
+                 " token"),
     Default="Yes",
     AllowedValues=yes_no,
   ))
@@ -471,12 +464,10 @@ if not args.no_network:
 authorization_token = template.add_parameter(Parameter(
   "AuthorizationToken",
   Type="String",
-  Description="""
-The authorization token token that should be provided via the X-Imgproxy-Auth header to get access
-to imgproxy.
-Allows to prevent access to imgproxy bypassing CDN.
-The X-Imgproxy-Auth header will be checked by the load balancer listener rule
-  """.strip().replace("\n", " "),
+  Description=("The authorization token token that should be provided via the X-Imgproxy-Auth"
+               " header to get access to imgproxy. Allows to prevent access to imgproxy bypassing"
+               " CDN. The X-Imgproxy-Auth header will be checked by the load balancer listener"
+               " rule"),
   Default="",
 ))
 template.add_parameter_to_group(authorization_token, endpoint_params_group)
@@ -622,14 +613,14 @@ if not args.no_network:
     EnableDnsSupport=True,
     EnableDnsHostnames=True,
     CidrBlock="10.0.0.0/16",
-    Tags= [
+    Tags=[
       Tag("Name", Join("-", [StackName, "VPC"])),
     ],
   ))
 
   internet_gateway = template.add_resource(ec2.InternetGateway(
     "InternetGateway",
-    Tags= [
+    Tags=[
       Tag("Name", Join("-", [StackName, "Internet-Gateway"])),
     ],
   ))
@@ -643,7 +634,7 @@ if not args.no_network:
   route_table = template.add_resource(ec2.RouteTable(
     "PublicRouteTable",
     VpcId=Ref(vpc),
-    Tags= [
+    Tags=[
       Tag("Name", Join("-", [StackName, "Routes"])),
     ],
   ))
@@ -687,9 +678,9 @@ if not args.no_network:
     GroupDescription="Access to the load balancer that sits in front of ECS",
     SecurityGroupIngress=[
       # Allow access from anywhere to our ECS services
-      { "CidrIp": "0.0.0.0/0", "IpProtocol": -1 },
+      {"CidrIp": "0.0.0.0/0", "IpProtocol": -1},
     ],
-    Tags= [
+    Tags=[
       Tag("Name", Join("-", [StackName, "SG-LoadBalancers"])),
     ],
   ))
@@ -703,9 +694,9 @@ if not args.no_network:
     GroupDescription="Access to the ECS hosts and the tasks/containers that run on them",
     SecurityGroupIngress=[
       # Only allow inbound access to ECS from the ELB
-      { "SourceSecurityGroupId": Ref(load_balancer_security_group), "IpProtocol": -1 },
+      {"SourceSecurityGroupId": Ref(load_balancer_security_group), "IpProtocol": -1},
     ],
-    Tags= [
+    Tags=[
       Tag("Name", Join("-", [StackName, "SG-ECS-Hosts"])),
     ],
   ))
@@ -756,7 +747,10 @@ if not args.no_cluster:
               actions_cloudformation.DescribeStackResource,
               actions_cloudformation.SignalResource,
             ],
-            Resource=[Join("", ["arn:aws:cloudformation:", Region, ":", AccountId, ":stack/", StackName, "/*"])],
+            Resource=[
+              Join("",
+                   ["arn:aws:cloudformation:", Region, ":", AccountId, ":stack/", StackName, "/*"])
+            ],
           )],
         ),
       )],
@@ -786,7 +780,8 @@ cluster = "${{{cluster}}}"
 should-signal = true
 stack-name = "${{AWS::StackName}}"
 logical-resource-id = "{autoscaling_group}"
-        """.strip().format(cluster=ecs_cluster.title, autoscaling_group=ec2_autoscaling_group_title))),
+        """.strip().format(cluster=ecs_cluster.title,
+                           autoscaling_group=ec2_autoscaling_group_title))),
       ),
     ))
 
@@ -868,30 +863,32 @@ logical-resource-id = "{autoscaling_group}"
       ),
     ))
 
-    ecs_capacity_provider_associations = template.add_resource(ecs.ClusterCapacityProviderAssociations(
-      "ECSClusterCapacityProviderAssociations",
-      Cluster=Ref(ecs_cluster),
-      CapacityProviders=[Ref(ecs_capacity_provider)],
-      DefaultCapacityProviderStrategy=[ecs.CapacityProviderStrategy(
-        Base=1,
-        Weight=10,
-        CapacityProvider=Ref(ecs_capacity_provider),
-      )],
-    ))
-
-  else: # if args.launch_type == "ec2"
-    ecs_capacity_provider_associations = template.add_resource(ecs.ClusterCapacityProviderAssociations(
-      "ECSClusterCapacityProviderAssociations",
-      Cluster=Ref(ecs_cluster),
-      CapacityProviders=["FARGATE"],
-      DefaultCapacityProviderStrategy=[
-        ecs.CapacityProviderStrategy(
+    ecs_capacity_provider_associations = \
+      template.add_resource(ecs.ClusterCapacityProviderAssociations(
+        "ECSClusterCapacityProviderAssociations",
+        Cluster=Ref(ecs_cluster),
+        CapacityProviders=[Ref(ecs_capacity_provider)],
+        DefaultCapacityProviderStrategy=[ecs.CapacityProviderStrategy(
           Base=1,
           Weight=10,
-          CapacityProvider="FARGATE",
-        ),
-      ],
-    ))
+          CapacityProvider=Ref(ecs_capacity_provider),
+        )],
+      ))
+
+  else:  # if args.launch_type == "ec2"
+    ecs_capacity_provider_associations = \
+      template.add_resource(ecs.ClusterCapacityProviderAssociations(
+        "ECSClusterCapacityProviderAssociations",
+        Cluster=Ref(ecs_cluster),
+        CapacityProviders=["FARGATE"],
+        DefaultCapacityProviderStrategy=[
+          ecs.CapacityProviderStrategy(
+            Base=1,
+            Weight=10,
+            CapacityProvider="FARGATE",
+          ),
+        ],
+      ))
 
 # ==============================================================================
 # ECS TASK DEFINITION
@@ -1081,12 +1078,14 @@ ecs_task_definition = template.add_resource(ecs.TaskDefinition(
       ),
       If(
         have_environment_secret_arn,
-        ecs.Environment(Name="IMGPROXY_ENV_AWS_SECRET_VERSION_ID", Value=Ref(environment_secret_version_id)),
+        ecs.Environment(Name="IMGPROXY_ENV_AWS_SECRET_VERSION_ID",
+                        Value=Ref(environment_secret_version_id)),
         NoValue,
       ),
       If(
         have_environment_systems_manager_parameters_path,
-        ecs.Environment(Name="IMGPROXY_ENV_AWS_SSM_PARAMETERS_PATH", Value=Ref(environment_systems_manager_parameters_path)),
+        ecs.Environment(Name="IMGPROXY_ENV_AWS_SSM_PARAMETERS_PATH",
+                        Value=Ref(environment_systems_manager_parameters_path)),
         NoValue,
       ),
       ecs.Environment(Name="IMGPROXY_USE_S3", Value="1"),
@@ -1143,7 +1142,7 @@ if not args.no_network:
     Name=Join("-", [StackName, "ALB"]),
     Subnets=subnet_refs,
     SecurityGroups=[Ref(load_balancer_security_group)],
-    Tags= [
+    Tags=[
       Tag("Name", Join("-", [StackName, "ALB"])),
     ],
   ))
@@ -1247,7 +1246,7 @@ autoscaling_scalable_target = template.add_resource(applicationautoscaling.Scala
   MaxCapacity=Ref(task_max_count),
   MinCapacity=Ref(task_min_count),
   ResourceId=Join("/", ["service", Ref(ecs_cluster), GetAtt(ecs_service, "Name")]),
-  RoleARN=Join(":", ["arn:aws:iam:", AccountId, "role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"]),
+  RoleARN=Join(":", ["arn:aws:iam:", AccountId, "role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"]),  # noqa: E501
   ScalableDimension="ecs:service:DesiredCount",
   ServiceNamespace="ecs",
 ))
@@ -1449,7 +1448,7 @@ if args.format == "json":
 else:
   out = template.to_yaml(sort_keys=False)
 
-if args.output == None:
+if args.output is None:
   print(out)
 else:
   file = open(args.output, "w")
