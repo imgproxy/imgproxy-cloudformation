@@ -37,9 +37,9 @@ cli_parser.add_argument("-o", "--output",
                         type=str,
                         help="Output file name. When not set, the template will be printed to stdout")
 cli_parser.add_argument("-t", "--launch-type",
-                        choices=["FARGATE", "EC2"],
-                        default="FARGATE",
-                        help="ESC Launch type. Default: FARGATE")
+                        choices=["fargate", "ec2"],
+                        default="fargate",
+                        help="ESC Launch type. Default: fargate")
 cli_parser.add_argument("-s", "--subnets-number",
                         type=int,
                         default=3,
@@ -53,8 +53,8 @@ cli_parser.add_argument("-C", "--no-cluster",
 
 args = cli_parser.parse_args()
 
-if args.no_cluster and args.launch_type == "EC2" and not args.no_network:
-  cli_parser.error("--no-cluster combined with --launch-type EC2 requires --no-network")
+if args.no_cluster and args.launch_type == "ec2" and not args.no_network:
+  cli_parser.error("--no-cluster combined with --launch-type=ec2 requires --no-network")
 
 template = Template()
 template.set_version("2010-09-09")
@@ -142,7 +142,7 @@ if args.no_network:
   template.add_parameter_to_group(vpc, network_params_group)
   template.set_parameter_label(vpc, "VPC ID")
 
-  if not args.no_cluster or args.launch_type == "FARGATE":
+  if not args.no_cluster or args.launch_type == "fargate":
     subnets = template.add_parameter(Parameter(
       "SubnetIds",
       Type="List<AWS::EC2::Subnet::Id>",
@@ -171,7 +171,7 @@ if args.no_network:
 
 # Cluster ----------------------------------------------------------------------
 
-if args.launch_type == "EC2" and not args.no_cluster:
+if args.launch_type == "ec2" and not args.no_cluster:
   cluster_instance_type = template.add_parameter(Parameter(
     "ClusterInstanceType",
     Type="String",
@@ -309,8 +309,8 @@ container_memory = template.add_parameter(Parameter(
   "ContainerMemory",
   Type="Number",
   Description="Amount of memory in megabytes to give to the container",
-  Default=2048 if args.launch_type == "FARGATE" else 1536,
-  MinValue=2048 if args.launch_type == "FARGATE" else 512,
+  Default=2048 if args.launch_type == "fargate" else 1536,
+  MinValue=2048 if args.launch_type == "fargate" else 512,
 ))
 template.add_parameter_to_group(container_memory, service_params_group)
 template.set_parameter_label(container_memory, "Memory per task")
@@ -486,7 +486,7 @@ template.set_parameter_label(authorization_token, "Authorization token (optional
 # CONDITIONS
 # ==============================================================================
 
-if args.launch_type == "EC2" and not args.no_cluster:
+if args.launch_type == "ec2" and not args.no_cluster:
   cluster_use_spot = template.add_condition(
     "ClusterOnDemandOnly",
     Not(Equals(Ref(cluster_on_demand_percentage), 100)),
@@ -547,7 +547,7 @@ have_authorization_token = template.add_condition(
 # RULES
 # ==============================================================================
 
-if args.launch_type == "EC2" and not args.no_cluster:
+if args.launch_type == "ec2" and not args.no_cluster:
   template.add_rule(
     "testWarmPoolAndNoSpot",
     {
@@ -710,7 +710,7 @@ if not args.no_network:
     ],
   ))
 
-elif not args.no_cluster or args.launch_type == "FARGATE":
+elif not args.no_cluster or args.launch_type == "fargate":
   subnet_refs = Ref(subnets)
 
 # ==============================================================================
@@ -730,7 +730,7 @@ if not args.no_cluster:
 ecs_capacity_provider_associations = None
 
 if not args.no_cluster:
-  if args.launch_type == "EC2":
+  if args.launch_type == "ec2":
     ec2_instance_role = template.add_resource(iam.Role(
       "EC2InstanceRole",
       RoleName=Join("-", [StackName, "ec2-instance"]),
@@ -879,7 +879,7 @@ logical-resource-id = "{autoscaling_group}"
       )],
     ))
 
-  else: # if args.launch_type == "EC2"
+  else: # if args.launch_type == "ec2"
     ecs_capacity_provider_associations = template.add_resource(ecs.ClusterCapacityProviderAssociations(
       "ECSClusterCapacityProviderAssociations",
       Cluster=Ref(ecs_cluster),
@@ -1055,13 +1055,13 @@ ecs_task_definition = template.add_resource(ecs.TaskDefinition(
   "ECSTaskDefinition",
   Family=StackName,
   Cpu=Ref(container_cpu),
-  Memory=Ref(container_memory) if args.launch_type == "FARGATE" else NoValue,
+  Memory=Ref(container_memory) if args.launch_type == "fargate" else NoValue,
   RuntimePlatform=ecs.RuntimePlatform(
     CpuArchitecture=FindInMap("Architectures", Ref(cpu_arch), "Arch"),
     OperatingSystemFamily="LINUX",
   ),
-  NetworkMode="awsvpc" if args.launch_type == "FARGATE" else "bridge",
-  RequiresCompatibilities=[args.launch_type],
+  NetworkMode="awsvpc" if args.launch_type == "fargate" else "bridge",
+  RequiresCompatibilities=[args.launch_type.upper()],
   TaskRoleArn=GetAtt(ecs_task_role, "Arn"),
   ExecutionRoleArn=GetAtt(ecs_task_execution_role, "Arn"),
   ContainerDefinitions=[ecs.ContainerDefinition(
@@ -1069,7 +1069,7 @@ ecs_task_definition = template.add_resource(ecs.TaskDefinition(
     Essential=True,
     Image=Ref(docker_image),
     Cpu=Ref(container_cpu),
-    MemoryReservation=Ref(container_memory) if args.launch_type == "EC2" else NoValue,
+    MemoryReservation=Ref(container_memory) if args.launch_type == "ec2" else NoValue,
     Environment=[
       ecs.Environment(Name="AWS_REGION", Value=Region),
       ecs.Environment(Name="IMGPROXY_BIND", Value=":8080"),
@@ -1171,7 +1171,7 @@ load_balancer_target_group = template.add_resource(loadbalancing.TargetGroup(
   VpcId=Ref(vpc),
   Port=80,
   Protocol="HTTP",
-  TargetType="ip" if args.launch_type == "FARGATE" else "instance",
+  TargetType="ip" if args.launch_type == "fargate" else "instance",
   TargetGroupAttributes=[loadbalancing.TargetGroupAttribute(
     Key="load_balancing.algorithm.type",
     Value="least_outstanding_requests",
@@ -1230,7 +1230,7 @@ ecs_service = template.add_resource(ecs.Service(
       SecurityGroups=[Ref(ecs_host_security_group)],
       Subnets=subnet_refs,
     ),
-  ) if args.launch_type == "FARGATE" else NoValue,
+  ) if args.launch_type == "fargate" else NoValue,
   LoadBalancers=[ecs.LoadBalancer(
     ContainerName="imgproxy",
     ContainerPort=8080,
@@ -1259,7 +1259,7 @@ autoscaling_scaling_out_policy = template.add_resource(applicationautoscaling.Sc
   ScalingTargetId=Ref(autoscaling_scalable_target),
   StepScalingPolicyConfiguration=applicationautoscaling.StepScalingPolicyConfiguration(
     AdjustmentType="PercentChangeInCapacity",
-    Cooldown=120 if args.launch_type == "EC2" else 30,
+    Cooldown=120 if args.launch_type == "ec2" else 30,
     MetricAggregationType="Average",
     StepAdjustments=[
       applicationautoscaling.StepAdjustment(
@@ -1297,7 +1297,7 @@ autoscaling_scaling_in_policy = template.add_resource(applicationautoscaling.Sca
   ScalingTargetId=Ref(autoscaling_scalable_target),
   StepScalingPolicyConfiguration=applicationautoscaling.StepScalingPolicyConfiguration(
     AdjustmentType="PercentChangeInCapacity",
-    Cooldown=600 if args.launch_type == "EC2" else 300,
+    Cooldown=600 if args.launch_type == "ec2" else 300,
     MetricAggregationType="Average",
     StepAdjustments=[applicationautoscaling.StepAdjustment(
       MetricIntervalUpperBound=0,
@@ -1325,7 +1325,7 @@ template.add_resource(cloudwatch.Alarm(
     Value=GetAtt(ecs_service, "Name"),
   )],
   Statistic="Average",
-  Period=30 if args.launch_type == "EC2" else 10,
+  Period=30 if args.launch_type == "ec2" else 10,
   EvaluationPeriods=2,
   Threshold=80,
   ComparisonOperator="GreaterThanThreshold",
@@ -1352,7 +1352,7 @@ template.add_resource(cloudwatch.Alarm(
   )],
   Statistic="Average",
   Period=30,
-  EvaluationPeriods=20 if args.launch_type == "EC2" else 10,
+  EvaluationPeriods=20 if args.launch_type == "ec2" else 10,
   Threshold=50,
   ComparisonOperator="LessThanThreshold",
   AlarmActions=[Ref(autoscaling_scaling_in_policy)],
