@@ -53,8 +53,8 @@ cli_parser.add_argument("-C", "--no-cluster",
 
 args = cli_parser.parse_args()
 
-if args.no_cluster and not args.no_network:
-  cli_parser.error("--no-cluster can be used only with --no-network")
+if args.no_cluster and args.launch_type == "EC2" and not args.no_network:
+  cli_parser.error("--no-cluster combined with --launch-type EC2 requires --no-network")
 
 template = Template()
 template.set_version("2010-09-09")

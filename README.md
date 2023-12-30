@@ -140,7 +140,10 @@ If you don't want the template to include the ECS cluster, use the `--no-cluster
 ```
 
 > [!IMPORTANT]
-> Since the ECS cluster's default capacity provider may be configured to use existing networking resources such as VPC, subnetworks, and security groups, the `--no-cluster` option requires the `--no-network` option to be used as well.
+> Since the Fargate and EC2 launch types require ECS services to be configured differently, make sure to use the `--launch-type` option corresponding to your ECS cluster's default capacity provider launch type.
+
+> [!IMPORTANT]
+> When the `--no-cluster` and `--launch-type=EC2` options are used together, the `--no-network` option is required.
 
 See the script's help (`./template.py -h`) for more options.
 
