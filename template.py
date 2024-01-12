@@ -27,6 +27,7 @@ import awacs.cloudwatch as actions_cloudwatch
 import awacs.secretsmanager as actions_secretsmanager
 import awacs.ssm as actions_ssm
 import awacs.kms as actions_kms
+import awacs.aws_marketplace as actions_marketplace
 
 cli_parser = argparse.ArgumentParser(description="imgproxy CloudFormation template generator")
 cli_parser.add_argument("-f", "--format",
@@ -922,6 +923,19 @@ ecs_task_role = template.add_resource(iam.Role(
             actions_logs.PutLogEvents,
             actions_cloudwatch.PutMetricData,
             actions_cloudwatch.PutMetricStream,
+          ],
+          Resource=["*"],
+        )],
+      ),
+    ),
+    iam.Policy(
+      PolicyName="aws-marketplace",
+      PolicyDocument=aws.PolicyDocument(
+        Version="2012-10-17",
+        Statement=[aws.Statement(
+          Effect=aws.Allow,
+          Action=[
+            actions_marketplace.MeterUsage,
           ],
           Resource=["*"],
         )],
