@@ -7,6 +7,9 @@
 ### Changed
 - If the `EnvironmentSystemsManagerParametersPath` parameter is not set, use `/${AWS::StackName}` as the default value.
 
+### Fixed
+- Fix stack deletion.
+
 ### Removed
 - Removed the `EnvironmentSecretARN` and `EnvironmentSecretVersionID` parameters.
 

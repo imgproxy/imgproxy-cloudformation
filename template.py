@@ -570,6 +570,8 @@ log_group = template.add_resource(logs.LogGroup(
 # NETWORK
 # ==============================================================================
 
+gateway_attachement = None
+
 if not args.no_network:
   vpc = template.add_resource(ec2.VPC(
     "VPC",
@@ -1170,7 +1172,7 @@ ecs_service = template.add_resource(ecs.Service(
   "ECSService",
   DependsOn=list(filter(
     lambda x: x is not None,
-    [load_balancer_listener_rule, ecs_capacity_provider_associations],
+    [load_balancer_listener_rule, ecs_capacity_provider_associations, gateway_attachement],
   )),
   ServiceName=StackName,
   Cluster=Ref(ecs_cluster),
