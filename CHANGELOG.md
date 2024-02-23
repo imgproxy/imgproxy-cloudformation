@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2024-02-23
 ### Added
 - Added `HowToConfigure` output.
 
