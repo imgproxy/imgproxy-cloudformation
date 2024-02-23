@@ -24,7 +24,6 @@ import awacs.s3 as actions_s3
 import awacs.cloudformation as actions_cloudformation
 import awacs.logs as actions_logs
 import awacs.cloudwatch as actions_cloudwatch
-import awacs.secretsmanager as actions_secretsmanager
 import awacs.ssm as actions_ssm
 import awacs.kms as actions_kms
 import awacs.aws_marketplace as actions_marketplace
@@ -130,10 +129,7 @@ amd64_instance_types = [
 network_params_group = "Network"
 cluster_params_group = "Cluster"
 service_params_group = "Service"
-environment_secret_params_group = \
-  "Load environment from an AWS Secrets Manager secret"
-environment_systems_manager_params_group = \
-  "Load environment from AWS Systems Manager Parameter Store"
+configuration_params_group = "imgproxy Configuration"
 s3_params_group = "S3 integration"
 endpoint_params_group = "Endpoint"
 
@@ -344,50 +340,21 @@ task_max_count = template.add_parameter(Parameter(
 template.add_parameter_to_group(task_max_count, service_params_group)
 template.set_parameter_label(task_max_count, "Maximum number of tasks")
 
-# Secret manager ---------------------------------------------------------------
-
-environment_secret_arn = template.add_parameter(Parameter(
-  "EnvironmentSecretARN",
-  Type="String",
-  Description=("ARN of an AWS Secrets Manager secret containing environment variables. See"
-               " https://docs.imgproxy.net/latest/configuration/loading_environment_variables#environment-file-syntax"  # noqa: E501
-               " for the secret syntax. See https://docs.imgproxy.net/configuration for supported"
-               " environment variables"),
-  Default="",
-))
-template.add_parameter_to_group(environment_secret_arn,
-                                environment_secret_params_group)
-template.set_parameter_label(environment_secret_arn,
-                             "Secrets Manager secret ARN (optional)")
-
-environment_secret_version_id = template.add_parameter(Parameter(
-  "EnvironmentSecretVersionID",
-  Type="String",
-  Description=("Version ID of the AWS Secrets Manager secret containing environment variables."
-               " If not set, the latest version is used"),
-  Default="",
-))
-template.add_parameter_to_group(environment_secret_version_id,
-                                environment_secret_params_group)
-template.set_parameter_label(environment_secret_version_id,
-                             "Secrets Manager secret version ID (optional)")
-
-# Systems manager --------------------------------------------------------------
+# Configuration ----------------------------------------------------------------
 
 environment_systems_manager_parameters_path = template.add_parameter(Parameter(
   "EnvironmentSystemsManagerParametersPath",
   Type="String",
-  Description=("A path of AWS Systems Manager Parameter Store parameters containing the"
+  Description=("A path of AWS Systems Manager Parameter Store parameters that should be loaded as"
                " environment variables. The path should start with a slash (/) but should not have"
-               " a slash (/) at the end. See"
-               " https://docs.imgproxy.net/latest/configuration/loading_environment_variables#aws-systems-manager-path"  # noqa: E501
-               " to learn how imgproxy maps AWS Systems Manager Parameter Store parameters to"
-               " environment variables. See https://docs.imgproxy.net/configuration for supported"
-               " environment variables"),
+               " a slash (/) at the end. For example, if you want to load the IMGPROXY_KEY variable"
+               " from the /imgproxy/prod/IMGPROXY_KEY parameter, the value should be"
+               " /imgproxy/prod. If not set, imgproxy will load environment variables from the"
+               " /${StackName} path."),
   Default="",
 ))
 template.add_parameter_to_group(environment_systems_manager_parameters_path,
-                                environment_systems_manager_params_group)
+                                configuration_params_group)
 template.set_parameter_label(environment_systems_manager_parameters_path,
                              "Systems Manager Parameter Store parameters path (optional)")
 
@@ -488,11 +455,6 @@ if args.launch_type == "ec2" and not args.no_cluster:
     "ClusterShouldAddWramPool",
     IfYes(cluster_add_warm_pool),
   )
-
-have_environment_secret_arn = template.add_condition(
-  "HaveEnvironmentSecretArn",
-  Not(Equals(Ref(environment_secret_arn), "")),
-)
 
 have_environment_systems_manager_parameters_path = template.add_condition(
   "HaveEnvironmentSystemsManagerParametersPath",
@@ -941,50 +903,32 @@ ecs_task_role = template.add_resource(iam.Role(
         )],
       ),
     ),
-    If(
-      have_environment_secret_arn,
-      iam.Policy(
-        PolicyName="secrets_manager-access",
-        PolicyDocument=aws.PolicyDocument(
-          Version="2012-10-17",
-          Statement=[aws.Statement(
-            Effect=aws.Allow,
-            Action=[
-              actions_secretsmanager.GetSecretValue,
-              actions_secretsmanager.ListSecretVersionIds,
+    iam.Policy(
+      PolicyName="systems_manager-access",
+      PolicyDocument=aws.PolicyDocument(
+        Version="2012-10-17",
+        Statement=[aws.Statement(
+          Effect=aws.Allow,
+          Action=[
+            actions_ssm.GetParametersByPath,
+          ],
+          Resource=[Join(
+            "",
+            [
+              "arn:aws:ssm:",
+              Region,
+              ":",
+              AccountId,
+              ":parameter",
+              If(
+                have_environment_systems_manager_parameters_path,
+                Ref(environment_systems_manager_parameters_path),
+                Join("", ["/", StackName]),
+              ),
             ],
-            Resource=[Ref(environment_secret_arn)],
           )],
-        ),
+        )],
       ),
-      NoValue,
-    ),
-    If(
-      have_environment_systems_manager_parameters_path,
-      iam.Policy(
-        PolicyName="systems_manager-access",
-        PolicyDocument=aws.PolicyDocument(
-          Version="2012-10-17",
-          Statement=[aws.Statement(
-            Effect=aws.Allow,
-            Action=[
-              actions_ssm.GetParametersByPath,
-            ],
-            Resource=[Join(
-              "",
-              [
-                "arn:aws:ssm:",
-                Region,
-                ":",
-                AccountId,
-                ":parameter",
-                Ref(environment_systems_manager_parameters_path)
-              ],
-            )],
-          )],
-        ),
-      ),
-      NoValue,
     ),
     If(
       have_s3_objects,
@@ -1085,22 +1029,17 @@ ecs_task_definition = template.add_resource(ecs.TaskDefinition(
       ecs.Environment(Name="AWS_REGION", Value=Region),
       ecs.Environment(Name="IMGPROXY_BIND", Value=":8080"),
       ecs.Environment(Name="IMGPROXY_LOG_FORMAT", Value="structured"),
-      If(
-        have_environment_secret_arn,
-        ecs.Environment(Name="IMGPROXY_ENV_AWS_SECRET_ID", Value=Ref(environment_secret_arn)),
-        NoValue,
-      ),
-      If(
-        have_environment_secret_arn,
-        ecs.Environment(Name="IMGPROXY_ENV_AWS_SECRET_VERSION_ID",
-                        Value=Ref(environment_secret_version_id)),
-        NoValue,
-      ),
-      If(
-        have_environment_systems_manager_parameters_path,
-        ecs.Environment(Name="IMGPROXY_ENV_AWS_SSM_PARAMETERS_PATH",
-                        Value=Ref(environment_systems_manager_parameters_path)),
-        NoValue,
+      ecs.Environment(
+        Name="IMGPROXY_ENV_AWS_SSM_PARAMETERS_PATH",
+        Value=If(
+          have_environment_systems_manager_parameters_path,
+          Ref(environment_systems_manager_parameters_path),
+          If(
+            have_environment_systems_manager_parameters_path,
+            Ref(environment_systems_manager_parameters_path),
+            Join("", ["/", StackName]),
+          ),
+        ),
       ),
       ecs.Environment(Name="IMGPROXY_USE_S3", Value="1"),
       If(
@@ -1451,6 +1390,37 @@ if not args.no_network:
     Description="The CloudFront endpoint for imgproxy",
     Value=GetAtt(cloudfront_distribution, "DomainName"),
     Condition=deploy_cloudfront,
+  ))
+
+  template.add_output(Output(
+    "HowToConfigure",
+    Description="How to configure imgproxy",
+    Value=Join(
+      "",
+      [
+        "imgproxy loads AWS Systems Manager Parameter Store parameters from the path ",
+        If(
+          have_environment_systems_manager_parameters_path,
+          Ref(environment_systems_manager_parameters_path),
+          Join("", ["/", StackName]),
+        ),
+        " as environment variables at launch. For example, if you create a parameter named ",
+        Join(
+          "/",
+          [
+            If(
+              have_environment_systems_manager_parameters_path,
+              Ref(environment_systems_manager_parameters_path),
+              Join("", ["/", StackName]),
+            ),
+            "IMGPROXY_KEY",
+          ]
+        ),
+        ", it will be loaded as the IMGPROXY_KEY environment variable.",
+        " If you change the parameter value, you need to restart the imgproxy service to pick up",
+        " the new value.",
+      ],
+    ),
   ))
 
 # ==============================================================================
