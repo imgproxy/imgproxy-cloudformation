@@ -53,8 +53,8 @@ These templates create all the required resources, plug-n-play:
 
 | Launch type |    |
 |-------------|----|
-| Fargate     | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-fargate-full.yml) |
-| EC2         | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-ec2-full.yml) |
+| Fargate     | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-fargate-full.yml) |
+| EC2         | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-ec2-full.yml) |
 
 ### Intallation without networking
 
@@ -76,8 +76,8 @@ These templates require the following resources to be provided via template para
 
 | Launch type |    |
 |-------------|----|
-| Fargate     | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-fargate-no-network.yml) |
-| EC2         | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-ec2-no-network.yml) |
+| Fargate     | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-fargate-no-network.yml) |
+| EC2         | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-ec2-no-network.yml) |
 
 ### Intallation without cluster and networking
 
@@ -100,8 +100,8 @@ These templates require the following resources to be provided via template para
 
 | Launch type |    |
 |-------------|----|
-| Fargate     | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-fargate-no-cluster.yml) |
-| EC2         | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-ec2-no-cluster.yml) |
+| Fargate     | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-fargate-no-cluster.yml) |
+| EC2         | [![](assets/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?stackName=imgproxy&templateURL=https://imgproxy-cf.s3.amazonaws.com/latest/ecs-ec2-no-cluster.yml) |
 
 ## Building your own template
 
