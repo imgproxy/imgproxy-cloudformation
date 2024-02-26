@@ -1036,11 +1036,7 @@ ecs_task_definition = template.add_resource(ecs.TaskDefinition(
         Value=If(
           have_environment_systems_manager_parameters_path,
           Ref(environment_systems_manager_parameters_path),
-          If(
-            have_environment_systems_manager_parameters_path,
-            Ref(environment_systems_manager_parameters_path),
-            Join("", ["/", StackName]),
-          ),
+          Join("", ["/", StackName]),
         ),
       ),
       ecs.Environment(Name="IMGPROXY_USE_S3", Value="1"),
