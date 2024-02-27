@@ -556,6 +556,32 @@ template.add_mapping("Architectures", {
   },
 })
 
+if not args.no_network:
+  template.add_mapping("OriginShieldRegionMap", {
+    # Regions with origin shield
+    "us-east-2": {"Region": "us-east-2"},
+    "us-east-1": {"Region": "us-east-1"},
+    "us-west-2": {"Region": "us-west-2"},
+    "ap-south-1": {"Region": "ap-south-1"},
+    "ap-northeast-2": {"Region": "ap-northeast-2"},
+    "ap-southeast-1": {"Region": "ap-southeast-1"},
+    "ap-southeast-2": {"Region": "ap-southeast-2"},
+    "ap-northeast-1": {"Region": "ap-northeast-1"},
+    "eu-central-1": {"Region": "eu-central-1"},
+    "eu-west-1": {"Region": "eu-west-1"},
+    "eu-west-2": {"Region": "eu-west-2"},
+    "sa-east-1": {"Region": "sa-east-1"},
+    # Regions without origin shield
+    "us-west-1": {"Region": "us-west-2"},
+    "af-south-1": {"Region": "eu-west-1"},
+    "ap-east-1": {"Region": "ap-southeast-1"},
+    "ca-central-1": {"Region": "us-east-1"},
+    "eu-south-1": {"Region": "eu-central-1"},
+    "eu-west-3": {"Region": "eu-west-2"},
+    "eu-north-1": {"Region": "eu-west-2"},
+    "me-south-1": {"Region": "ap-south-1"},
+  })
+
 # ==============================================================================
 # CLOUDWATCH LOGS
 # ==============================================================================
@@ -1357,7 +1383,7 @@ if not args.no_network:
         ),
         OriginShield=cloudfront.OriginShield(
           Enabled=True,
-          OriginShieldRegion=Region,
+          OriginShieldRegion=FindInMap("OriginShieldRegionMap", Region, "Region"),
         ),
       )],
       DefaultCacheBehavior=cloudfront.DefaultCacheBehavior(
