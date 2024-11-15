@@ -447,7 +447,7 @@ template.set_parameter_label(authorization_token, "Authorization token (optional
 
 if args.launch_type == "ec2" and not args.no_cluster:
   cluster_use_spot = template.add_condition(
-    "ClusterOnDemandOnly",
+    "ClusterUseSpot",
     Not(Equals(Ref(cluster_on_demand_percentage), 100)),
   )
 
@@ -766,6 +766,9 @@ if not args.no_cluster:
         UserData=Base64(Sub("""
 [settings.ecs]
 cluster = "${{{cluster}}}"
+
+[settings.autoscaling]
+should-wait = true
 
 [settings.cloudformation]
 should-signal = true

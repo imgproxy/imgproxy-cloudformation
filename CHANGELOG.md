@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+### Fixed
+- Added `should-wait = true` to the EC2 instance configuration so it doesn't register itself in the ECS cluster while in warm pool.
+
 ## [0.2.1] - 2024-02-28
 ### Fixed
 - Fixed CloudFront Origin Shield region selection.
