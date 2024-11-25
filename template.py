@@ -74,6 +74,16 @@ class Contains(AWSHelperFn):
 
 
 arm64_instance_types = [
+  "c8g.medium",
+  "c8g.large",
+  "c8g.xlarge",
+  "c8g.2xlarge",
+  "c8g.4xlarge",
+  "c8g.8xlarge",
+  "c8g.12xlarge",
+  "c8g.16xlarge",
+  "c8g.24xlarge",
+  "c8g.48xlarge",
   "c7g.medium",
   "c7g.large",
   "c7g.xlarge",
@@ -183,7 +193,7 @@ if args.launch_type == "ec2" and not args.no_cluster:
     "ClusterInstanceType",
     Type="String",
     Description="EC2 instance type to use in your ECS cluster",
-    Default="c7g.medium",
+    Default="c8g.medium",
     AllowedValues=arm64_instance_types + amd64_instance_types,
   ))
   template.add_parameter_to_group(cluster_instance_type, cluster_params_group)

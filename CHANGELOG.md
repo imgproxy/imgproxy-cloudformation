@@ -3,6 +3,7 @@
 ## [Unreleased]
 ### Changed
 - Updated the EC2 image ID to the latest Bottlerocket variant.
+- Added C8g instances to the `ClusterInstanceType` parameter values.
 
 ### Fixed
 - Added `should-wait = true` to the EC2 instance configuration so it doesn't register itself in the ECS cluster while in warm pool.
