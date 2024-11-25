@@ -17,6 +17,8 @@ import troposphere.policies as policies
 import troposphere.applicationautoscaling as applicationautoscaling
 import troposphere.cloudwatch as cloudwatch
 import troposphere.cloudfront as cloudfront
+import troposphere.awslambda as aws_lambda
+import troposphere.cloudformation as cloudformation
 
 import awacs.aws as aws
 import awacs.sts as actions_sts
@@ -26,6 +28,7 @@ import awacs.logs as actions_logs
 import awacs.cloudwatch as actions_cloudwatch
 import awacs.ssm as actions_ssm
 import awacs.kms as actions_kms
+import awacs.autoscaling as actions_autoscaling
 import awacs.aws_marketplace as actions_marketplace
 
 cli_parser = argparse.ArgumentParser(description="imgproxy CloudFormation template generator")
@@ -819,18 +822,22 @@ logical-resource-id = "{autoscaling_group}"
         ),
       ),
       UpdatePolicy=policies.UpdatePolicy(
-        AutoScalingRollingUpdate=policies.AutoScalingRollingUpdate(
-          MinInstancesInService=1,
-          MaxBatchSize=1,
-          PauseTime="PT15M",
-          SuspendProcesses=[
-            "HealthCheck",
-            "ReplaceUnhealthy",
-            "AZRebalance",
-            "AlarmNotification",
-            "ScheduledActions",
-          ],
-          WaitOnResourceSignals=True,
+        AutoScalingRollingUpdate=If(
+          cluster_should_add_warm_pool,
+          NoValue,
+          policies.AutoScalingRollingUpdate(
+            MinInstancesInService=1,
+            MaxBatchSize=1,
+            PauseTime="PT15M",
+            SuspendProcesses=[
+              "HealthCheck",
+              "ReplaceUnhealthy",
+              "AZRebalance",
+              "AlarmNotification",
+              "ScheduledActions",
+            ],
+            WaitOnResourceSignals=True,
+          ),
         ),
       ),
     ))
@@ -839,8 +846,12 @@ logical-resource-id = "{autoscaling_group}"
       "EC2AutoScalingGroupWarmPool",
       Condition=cluster_should_add_warm_pool,
       AutoScalingGroupName=Ref(ec2_autoscaling_group),
+      # ReuseOnScaleIn should be disabled.
+      # If an instance is returned to the warm pool and then reused, its status
+      # will still be "Draining" in ECS and it will not be able to accept new tasks.
+      # See https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using-warm-pool.html
       InstanceReusePolicy=autoscaling.InstanceReusePolicy(
-        ReuseOnScaleIn=True,
+        ReuseOnScaleIn=False,
       ),
     ))
 
@@ -883,6 +894,107 @@ logical-resource-id = "{autoscaling_group}"
           ),
         ],
       ))
+
+# ==============================================================================
+# EC2 AUTOSCALING GROUP INSTANCE REFRESHER
+# ==============================================================================
+
+if not args.no_cluster and args.launch_type == "ec2":
+  instance_refresher_role = template.add_resource(iam.Role(
+    "InstanceRefresherLambdaRole",
+    Condition=cluster_should_add_warm_pool,
+    RoleName=Join("-", [StackName, "instance-refresher"]),
+    Path="/",
+    AssumeRolePolicyDocument=aws.PolicyDocument(
+      Version="2012-10-17",
+      Statement=[aws.Statement(
+        Effect=aws.Allow,
+        Action=[actions_sts.AssumeRole],
+        Principal=aws.Principal("Service", ["lambda.amazonaws.com"]),
+      )],
+    ),
+    ManagedPolicyArns=[
+      "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    ],
+    Policies=[
+      iam.Policy(
+        PolicyName="autoscaling-start-instance-refresh",
+        PolicyDocument=aws.PolicyDocument(
+          Version="2012-10-17",
+          Statement=[aws.Statement(
+            Effect=aws.Allow,
+            Action=[
+              actions_autoscaling.StartInstanceRefresh,
+            ],
+            Resource=["*"],
+          )],
+        ),
+      ),
+    ],
+  ))
+
+  instance_refresher_lambda = template.add_resource(aws_lambda.Function(
+    "InstanceRefresherLambda",
+    Condition=cluster_should_add_warm_pool,
+    FunctionName=Join("-", [StackName, "instance-refresher"]),
+    Runtime="python3.12",
+    Handler="index.handler",
+    Role=GetAtt(instance_refresher_role, "Arn"),
+    Timeout=30,
+    Code=aws_lambda.Code(
+      ZipFile="""
+import cfnresponse
+import json
+import boto3
+
+client = boto3.client('autoscaling')
+
+def handler(event, context):
+  response_data = {}
+  try:
+    if event['RequestType'] != 'Create' and event['RequestType'] != 'Update':
+      cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, 'InstanceRefresher')
+      return
+
+    response = client.start_instance_refresh(
+      AutoScalingGroupName=event['ResourceProperties']['AutoScalingGroupName'],
+      Preferences={
+        'MinHealthyPercentage': 100,
+        'MaxHealthyPercentage': 200,
+        'SkipMatching': True,
+        'ScaleInProtectedInstances': 'Ignore',
+        'StandbyInstances': 'Ignore'
+      }
+    )
+    response_data['InstanceRefreshId'] = response['InstanceRefreshId']
+    cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, 'InstanceRefresher')
+  except Exception as e:
+    response_data['exception'] = e.__str__()
+    cfnresponse.send(event, context, cfnresponse.FAILED, response_data, 'InstanceRefresher')
+      """.strip(),
+    ),
+  ))
+
+  class CustomPlacementGroup(cloudformation.AWSCustomObject):
+    resource_type = "Custom::InstanceRefresher"
+    props = {
+      "ServiceToken": (str, True),
+      "ServiceTimeout": (str, True),
+      "AutoScalingGroupName": (str, True),
+      "LaunchTemplate": (str, True),
+      "LaunchTemplateVersion": (str, True),
+    }
+
+  template.add_resource(CustomPlacementGroup(
+    "EC2InstanceRefresher",
+    Condition=cluster_should_add_warm_pool,
+    ServiceToken=GetAtt(instance_refresher_lambda, "Arn"),
+    ServiceTimeout="60",
+    AutoScalingGroupName=Ref(ec2_autoscaling_group),
+    # Provide the launch template data just to trigger the update
+    LaunchTemplate=Ref(ec2_launch_template),
+    LaunchTemplateVersion=GetAtt(ec2_launch_template, "LatestVersionNumber"),
+  ))
 
 # ==============================================================================
 # ECS TASK DEFINITION
