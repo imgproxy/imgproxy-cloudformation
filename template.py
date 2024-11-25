@@ -1490,6 +1490,7 @@ if not args.no_network:
     Condition=deploy_cloudfront,
     DistributionConfig=cloudfront.DistributionConfig(
       Enabled=True,
+      HttpVersion="http2and3",
       Origins=[cloudfront.Origin(
         DomainName=GetAtt(load_balancer, "DNSName"),
         Id=Join("-", [StackName, "origin"]),
