@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+- Updated the EC2 image ID to the latest Bottlerocket variant.
+
 ### Fixed
 - Added `should-wait = true` to the EC2 instance configuration so it doesn't register itself in the ECS cluster while in warm pool.
 - Fixed WarmPool usage in the EC2 Auto Scaling Group.

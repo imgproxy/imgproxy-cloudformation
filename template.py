@@ -551,11 +551,11 @@ if args.launch_type == "ec2" and not args.no_cluster:
 template.add_mapping("Architectures", {
   "ARM64": {
     "Arch": "ARM64",
-    "ImageId": "{{resolve:ssm:/aws/service/bottlerocket/aws-ecs-1/arm64/latest/image_id}}",
+    "ImageId": "{{resolve:ssm:/aws/service/bottlerocket/aws-ecs-2/arm64/latest/image_id}}",
   },
   "AMD64": {
     "Arch": "X86_64",
-    "ImageId": "{{resolve:ssm:/aws/service/bottlerocket/aws-ecs-1/x86_64/latest/image_id}}",
+    "ImageId": "{{resolve:ssm:/aws/service/bottlerocket/aws-ecs-2/x86_64/latest/image_id}}",
   },
 })
 
