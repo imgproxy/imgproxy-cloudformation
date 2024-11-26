@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 2024-11-26
 ### Changed
 - Updated the EC2 image ID to the latest Bottlerocket variant.
 - Added C8g instances to the `ClusterInstanceType` parameter values.
